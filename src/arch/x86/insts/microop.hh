@@ -116,7 +116,7 @@ namespace X86ISA
         {
             std::stringstream ss;
 
-            ccprintf(ss, "\t%s.%s", instMnem, mnemonic);
+            ccprintf(ss, "\t%s : %s", instMnem, mnemonic);
 
             return ss.str();
         }
