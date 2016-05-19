@@ -60,7 +60,7 @@
 using namespace std;
 
 // Use an separate stack for fatal signal handlers
-static uint8_t fatalSigStack[2 * SIGSTKSZ];
+static char fatalSigStack[2 * SIGSTKSZ];
 
 static bool
 setupAltStack()
