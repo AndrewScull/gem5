@@ -47,6 +47,7 @@ if env['TARGET_ISA'] == 'x86':
     Source('decoder.cc')
     Source('decoder_tables.cc')
     Source('emulenv.cc')
+    Source('freebsd/system.cc')
     Source('faults.cc')
     Source('insts/badmicroop.cc')
     Source('insts/microfpop.cc')
@@ -83,6 +84,8 @@ if env['TARGET_ISA'] == 'x86':
     DebugFlag('LocalApic', "Local APIC debugging")
     DebugFlag('PageTableWalker', \
               "Page table walker state machine debugging")
+    DebugFlag('PageTableWalkerVerbose', \
+              "More page table walker state machine debugging")
     DebugFlag('Decoder', "Decoder debug output")
     DebugFlag('X86', "Generic X86 ISA debugging")
 

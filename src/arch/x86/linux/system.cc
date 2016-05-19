@@ -41,6 +41,7 @@
 #include "arch/x86/regs/int.hh"
 #include "arch/x86/isa_traits.hh"
 #include "arch/vtophys.hh"
+#include "arch/x86/system.hh"
 #include "base/trace.hh"
 #include "cpu/thread_context.hh"
 #include "mem/port_proxy.hh"
@@ -62,6 +63,8 @@ LinuxX86System::~LinuxX86System()
 void
 LinuxX86System::initState()
 {
+    LinuxX86SystemHelper h = LinuxX86SystemHelper();
+    X86System::setHelper(&h);
     X86System::initState();
 
     // The location of the real mode data structure.
@@ -137,4 +140,87 @@ LinuxX86System *
 LinuxX86SystemParams::create()
 {
     return new LinuxX86System(this);
+}
+
+void
+LinuxX86SystemHelper::setupPMAP(ThreadContext *tc)
+{
+    const int PML4Bits = 9;
+    const int PDPTBits = 9;
+    const int PDTBits = 9;
+
+    PortProxy &physProxy = tc->getPhysProxy();
+
+    // Page Map Level 4
+
+    // read/write, user, not present
+    uint64_t pml4e = X86ISA::htog(0x6);
+    for (int offset = 0; offset < (1 << PML4Bits) * 8; offset += 8) {
+        physProxy.writeBlob(PageMapLevel4 + offset, (uint8_t *)(&pml4e), 8);
+    }
+    // Point to the only PDPT
+    pml4e = X86ISA::htog(0x7 | PageDirPtrTable);
+    physProxy.writeBlob(PageMapLevel4, (uint8_t *)(&pml4e), 8);
+
+    // Page Directory Pointer Table
+
+    // read/write, user, not present
+    uint64_t pdpe = X86ISA::htog(0x6);
+    for (int offset = 0; offset < (1 << PDPTBits) * 8; offset += 8) {
+        physProxy.writeBlob(PageDirPtrTable + offset,
+                            (uint8_t *)(&pdpe), 8);
+    }
+    // Point to the PDTs
+    for (int table = 0; table < NumPDTs; table++) {
+        pdpe = X86ISA::htog(0x7 | PageDirTable[table]);
+        physProxy.writeBlob(PageDirPtrTable + table * 8,
+                            (uint8_t *)(&pdpe), 8);
+    }
+
+    // Page Directory Tables
+
+    Addr base = 0;
+    const Addr pageSize = 2 << 20;
+    for (int table = 0; table < NumPDTs; table++) {
+        for (int offset = 0; offset < (1 << PDTBits) * 8; offset += 8) {
+            // read/write, user, present, 4MB
+            uint64_t pdte = X86ISA::htog(0x87 | base);
+            physProxy.writeBlob(PageDirTable[table] + offset,
+                                (uint8_t *)(&pdte), 8);
+            base += pageSize;
+        }
+    }
+}
+
+void
+LinuxX86SystemHelper::transitionToLongMode(ThreadContext *tc)
+{
+
+    /*
+     * Transition from real mode all the way up to Long mode
+     */
+    CR0 cr0 = tc->readMiscRegNoEffect(MISCREG_CR0);
+    //Turn off paging.
+    cr0.pg = 0;
+    tc->setMiscReg(MISCREG_CR0, cr0);
+    //Turn on protected mode.
+    cr0.pe = 1;
+    tc->setMiscReg(MISCREG_CR0, cr0);
+
+    CR4 cr4 = tc->readMiscRegNoEffect(MISCREG_CR4);
+    //Turn on pae.
+    cr4.pae = 1;
+    tc->setMiscReg(MISCREG_CR4, cr4);
+
+    //Point to the page tables.
+    tc->setMiscReg(MISCREG_CR3, PageMapLevel4);
+
+    Efer efer = tc->readMiscRegNoEffect(MISCREG_EFER);
+    //Enable long mode.
+    efer.lme = 1;
+    tc->setMiscReg(MISCREG_EFER, efer);
+
+    //Activate long mode.
+    cr0.pg = 1;
+    tc->setMiscReg(MISCREG_CR0, cr0);
 }

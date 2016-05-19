@@ -92,14 +92,19 @@ def build_test_system(np):
     elif buildEnv['TARGET_ISA'] == "sparc":
         test_sys = makeSparcSystem(test_mem_mode, bm[0], cmdline=cmdline)
     elif buildEnv['TARGET_ISA'] == "x86":
-        test_sys = makeLinuxX86System(test_mem_mode, options.num_cpus, bm[0],
-                options.ruby, cmdline=cmdline)
+        test_sys = makeX86System(test_mem_mode, options.num_cpus, bm[0],
+                options.ruby, cmdline=cmdline,
+                loader_config_file=options.loader_config_file,
+                virtblk=options.virtblk)
     elif buildEnv['TARGET_ISA'] == "arm":
         test_sys = makeArmSystem(test_mem_mode, options.machine_type,
                                  options.num_cpus, bm[0], options.dtb_filename,
                                  bare_metal=options.bare_metal,
                                  cmdline=cmdline,
-                                 external_memory=options.external_memory_system)
+                                 external_memory
+                                   =options.external_memory_system,
+                                 loader_config_file=options.loader_config_file,
+                                 virtblk=options.virtblk)
         if options.enable_context_switch_stats_dump:
             test_sys.enable_context_switch_stats_dump = True
     else:
@@ -143,6 +148,16 @@ def build_test_system(np):
 
     if is_kvm_cpu(TestCPUClass) or is_kvm_cpu(FutureClass):
         test_sys.vm = KvmVM()
+
+    if buildEnv['TARGET_ISA'] == 'arm':
+        if options.pmu:
+            for (i, cpu) in enumerate(test_sys.cpu):
+                #print "Enabling events for ArmPMU on cpu.isa[{}]".format(i)
+                cpu.isa[0].pmu.addArchEvents(
+                    cpu=cpu, dtb=cpu.dtb, itb=cpu.itb,
+                    icache=getattr(cpu, "il1_cache", None),
+                    dcache=getattr(cpu, "dl1_cache", None),
+                    l2cache=getattr(cpu, "l2_cache", None))
 
     if options.ruby:
         # Check for timing mode because ruby does not support atomic accesses
@@ -246,11 +261,14 @@ def build_drive_system(np):
     elif buildEnv['TARGET_ISA'] == 'sparc':
         drive_sys = makeSparcSystem(drive_mem_mode, bm[1], cmdline=cmdline)
     elif buildEnv['TARGET_ISA'] == 'x86':
-        drive_sys = makeLinuxX86System(drive_mem_mode, np, bm[1],
-                                       cmdline=cmdline)
+        drive_sys = makeX86System(drive_mem_mode, np, bm[1], cmdline=cmdline,
+                                  loader_config_file
+                                    =options.loader_config_file,
+                                  virtblk=options.virtblk)
     elif buildEnv['TARGET_ISA'] == 'arm':
         drive_sys = makeArmSystem(drive_mem_mode, options.machine_type, np,
-                                  bm[1], options.dtb_filename, cmdline=cmdline)
+                                  bm[1], options.dtb_filename, cmdline=cmdline,
+                                  virtblk=options.virtblk)
 
     # Create a top-level voltage domain
     drive_sys.voltage_domain = VoltageDomain(voltage = options.sys_voltage)
@@ -327,12 +345,15 @@ if options.benchmark:
 else:
     if options.dual:
         bm = [SysConfig(disk=options.disk_image, rootdev=options.root_device,
-                        mem=options.mem_size, os_type=options.os_type),
+                        mem=options.mem_size, os_type=options.os_type,
+                        kernel=options.kernel, virtblk=options.virtblk),
               SysConfig(disk=options.disk_image, rootdev=options.root_device,
-                        mem=options.mem_size, os_type=options.os_type)]
+                        mem=options.mem_size, os_type=options.os_type,
+                        kernel=options.kernel, virtblk=options.virtblk)]
     else:
         bm = [SysConfig(disk=options.disk_image, rootdev=options.root_device,
-                        mem=options.mem_size, os_type=options.os_type)]
+                        mem=options.mem_size, os_type=options.os_type,
+                        kernel=options.kernel, virtblk=options.virtblk)]
 
 np = options.num_cpus
 

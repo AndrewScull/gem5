@@ -107,7 +107,10 @@ def run_test(target, source, env):
     # The slowest regression (bzip2) requires ~4 hours;
     # 5 hours was chosen to be conservative.
     elif env['TIMEOUT']:
-        cmd = 'timeout --foreground 5h %s' % cmd
+        if sys.platform.startswith('freebsd'):
+            cmd = 'gtimeout --foreground 5h %s' % cmd
+        else:
+            cmd = 'timeout --foreground 5h %s' % cmd
 
     # Create a default value for the status string, changed as needed
     # based on the status.

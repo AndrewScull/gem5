@@ -32,12 +32,14 @@ from m5.defines import buildEnv
 
 class SysConfig:
     def __init__(self, script=None, mem=None, disk=None, rootdev=None,
-                 os_type='linux'):
+                 os_type='linux', kernel=None, virtblk=None):
         self.scriptname = script
         self.diskname = disk
         self.memsize = mem
         self.root = rootdev
         self.ostype = os_type
+        self.kernel = kernel
+        self.virtblk = virtblk
 
     def script(self):
         if self.scriptname:
@@ -73,6 +75,12 @@ class SysConfig:
 
     def os_type(self):
         return self.ostype
+
+    def kernel(self):
+        return self.kernel
+
+    def virtblk(self):
+        return self.virtblk
 
 # Benchmarks are defined as a key in a dict which is a list of SysConfigs
 # The first defined machine is the test system, the others are driving systems

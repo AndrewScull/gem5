@@ -101,10 +101,29 @@ TLB::insert(Addr vpn, TlbEntry &entry)
 {
     // If somebody beat us to it, just use that existing entry.
     TlbEntry *newEntry = trie.lookup(vpn);
+#ifdef BZ
+    if (newEntry && newEntry->logBytes == entry.logBytes) {
+#else
     if (newEntry) {
+#endif
         assert(newEntry->vaddr == vpn);
         return newEntry;
     }
+#ifdef BZ
+    // We have at least one matching entry with a different mask,
+    // remove it before inserting the new one.
+    if (newEntry && newEntry->trieHandle) {
+        for (unsigned i = 0; i < size; i++) {
+            if (tlb[i].trieHandle &&
+                tlb[i].trieHandle == newEntry->trieHandle) {
+
+                trie.remove(tlb[i].trieHandle);
+                tlb[i].trieHandle = NULL;
+                freeList.push_back(&tlb[i]);
+            }
+        }
+    }
+#endif
 
     if (freeList.empty())
         evictLRU();

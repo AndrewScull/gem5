@@ -126,7 +126,7 @@ class ElfObject : public ObjectFile
 
     static ObjectFile *tryFile(const std::string &fname,
                                size_t len, uint8_t *data,
-                               bool skip_interp_check = false);
+                               bool skip_interp_check = true);
     Addr programHeaderTable() {return _programHeaderTable;}
     uint16_t programHeaderSize() {return _programHeaderSize;}
     uint16_t programHeaderCount() {return _programHeaderCount;}

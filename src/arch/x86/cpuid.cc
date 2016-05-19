@@ -96,7 +96,7 @@ namespace X86ISA {
                         stringToRegister(vendorString + 8));
                 break;
               case FamilyModelSteppingBrandFeatures:
-                result = CpuidResult(0x00020f51, 0x00000405,
+                result = CpuidResult(0x00020f51, 0x00000005,
                                      0xe3d3fbff, 0x00000001);
                 break;
               case NameString1:
@@ -154,8 +154,8 @@ namespace X86ISA {
                         stringToRegister(vendorString + 8));
                 break;
               case FamilyModelStepping:
-                result = CpuidResult(0x00020f51, 0x00000805,
-                                     0xe7dbfbff, 0x04000209);
+                result = CpuidResult(0x00020f51, 0x00000005,
+                                     0xe7dbfbff, 0x00000001);
                 break;
               default:
                 warn("x86 cpuid family 0x0000: unimplemented function %u",

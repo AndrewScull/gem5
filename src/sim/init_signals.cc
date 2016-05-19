@@ -66,7 +66,11 @@ static bool
 setupAltStack()
 {
     stack_t stack;
+#ifdef __FreeBSD__
+    stack.ss_sp = (char *)fatalSigStack;
+#else
     stack.ss_sp = fatalSigStack;
+#endif
     stack.ss_size = sizeof(fatalSigStack);
     stack.ss_flags = 0;
 

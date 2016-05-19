@@ -60,6 +60,7 @@
 #include "cpu/base.hh"
 #include "cpu/thread_context.hh"
 #include "debug/PageTableWalker.hh"
+#include "debug/PageTableWalkerVerbose.hh"
 #include "mem/packet_access.hh"
 #include "mem/request.hh"
 
@@ -73,6 +74,11 @@ Walker::start(ThreadContext * _tc, BaseTLB::Translation *_translation,
     // outstanding requests, see if this request can be coalesced with
     // another one (i.e. either coalesce or start walk)
     WalkerState * newState = new WalkerState(this, _translation, _req);
+    DPRINTF(PageTableWalkerVerbose, "%s: Created newState %p(this=%p, "
+        "_translation=%p, _req=%#x) _mode=%#x "
+        "req vaddr=%#x isTimingMode %s size %d\n",
+        __func__, newState, this, _translation, _req, _mode, _req->getVaddr(),
+        (sys->isTimingMode()) ? "yes" : "no", currStates.size());
     newState->initState(_tc, _mode, sys->isTimingMode());
     if (currStates.size()) {
         assert(newState->isTiming());
@@ -111,6 +117,8 @@ Walker::recvTimingResp(PacketPtr pkt)
         dynamic_cast<WalkerSenderState *>(pkt->popSenderState());
     WalkerState * senderWalk = senderState->senderWalk;
     bool walkComplete = senderWalk->recvPacket(pkt);
+    DPRINTF(PageTableWalkerVerbose, "%s: senderWalk %p walkComplete %d\n",
+        __func__, senderWalk, walkComplete);
     delete senderState;
     if (walkComplete) {
         std::list<WalkerState *>::iterator iter;
@@ -124,6 +132,8 @@ Walker::recvTimingResp(PacketPtr pkt)
         delete senderWalk;
         // Since we block requests when another is outstanding, we
         // need to check if there is a waiting request to be serviced
+        DPRINTF(PageTableWalkerVerbose, "%s: size %#x !scheduled %d\n",
+             __func__, currStates.size(), !startWalkWrapperEvent.scheduled());
         if (currStates.size() && !startWalkWrapperEvent.scheduled())
             // delay sending any new requests until we are finished
             // with the responses
@@ -145,6 +155,8 @@ Walker::recvReqRetry()
     for (iter = currStates.begin(); iter != currStates.end(); iter++) {
         WalkerState * walkerState = *(iter);
         if (walkerState->isRetrying()) {
+            DPRINTF(PageTableWalkerVerbose, "%s: walkerState %p ->retry()\n",
+                __func__, walkerState);
             walkerState->retry();
         }
     }
@@ -152,9 +164,13 @@ Walker::recvReqRetry()
 
 bool Walker::sendTiming(WalkerState* sendingState, PacketPtr pkt)
 {
+    bool b;
     WalkerSenderState* walker_state = new WalkerSenderState(sendingState);
     pkt->pushSenderState(walker_state);
-    if (port.sendTimingReq(pkt)) {
+    b = port.sendTimingReq(pkt);
+    DPRINTF(PageTableWalkerVerbose, "%s: pkt %p walkerState %p "
+        "sendTimingReq? %d\n", __func__, pkt, walker_state, b);
+    if (b) {
         return true;
     } else {
         // undo the adding of the sender state and delete it, as we
@@ -184,6 +200,8 @@ Walker::WalkerState::initState(ThreadContext * _tc,
     tc = _tc;
     mode = _mode;
     timing = _isTiming;
+    DPRINTF(PageTableWalkerVerbose, "%s: tc %p mode %#x timing? %d\n",
+        __func__, tc, mode, timing);
 }
 
 void
@@ -191,6 +209,7 @@ Walker::startWalkWrapper()
 {
     unsigned num_squashed = 0;
     WalkerState *currState = currStates.front();
+    DPRINTF(PageTableWalkerVerbose, "%s: currState %p\n", __func__, currState);
     while ((num_squashed < numSquashable) && currState &&
         currState->translation->squashed()) {
         currStates.pop_front();
@@ -223,6 +242,8 @@ Walker::WalkerState::startWalk()
     Fault fault = NoFault;
     assert(!started);
     started = true;
+    DPRINTF(PageTableWalkerVerbose, "%s: req %p vaddr %#x timing? %d\n",
+        __func__, req, req->getVaddr(), timing);
     setupWalk(req->getVaddr());
     if (timing) {
         nextState = state;
@@ -266,6 +287,8 @@ Walker::WalkerState::startFunctional(Addr &addr, unsigned &logBytes)
     } while (read);
     logBytes = entry.logBytes;
     addr = entry.paddr;
+    DPRINTF(PageTableWalkerVerbose, "%s: addr %#x logBytes %#x fault %s\n",
+        __func__, addr, logBytes, (fault == NoFault) ? "NoFault" : "??Fault");
 
     return fault;
 }
@@ -288,17 +311,24 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
     bool doTLBInsert = false;
     bool doEndWalk = false;
     bool badNX = pte.nx && mode == BaseTLB::Execute && enableNX;
+    DPRINTF(PageTableWalkerVerbose, "%s: pkt %p PC %#x vaddr %#x pte %#x\n",
+        __func__, read, tc->pcState().pc(), vaddr, pte);
     switch(state) {
       case LongPML4:
-        DPRINTF(PageTableWalker,
-                "Got long mode PML4 entry %#016x.\n", (uint64_t)pte);
-        nextRead = ((uint64_t)pte & (mask(40) << 12)) + vaddr.longl3 * dataSize;
+        DPRINTF(PageTableWalker, "PC %#x %#x vaddr %#x "
+            "Got long mode PML4 entry %#016x.\n",
+            tc->pcState().pc(), tc->instAddr(), vaddr, (uint64_t)pte);
+        nextRead = (uint64_t)pte & (mask(40) << 12);
+        nextRead += vaddr.longl3 * dataSize;
         doWrite = !pte.a;
         pte.a = 1;
         entry.writable = pte.w;
         entry.user = pte.u;
         if (badNX || !pte.p) {
             doEndWalk = true;
+            DPRINTF(PageTableWalkerVerbose, "LongPML4: vaddr=%#x badNX %d, "
+                "!pte.p=%#x read=%#x cmd=%s datasize=%d\n",
+                vaddr, badNX, pte.p, read, read->cmdString(), dataSize);
             fault = pageFault(pte.p);
             break;
         }
@@ -306,9 +336,11 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
         nextState = LongPDP;
         break;
       case LongPDP:
-        DPRINTF(PageTableWalker,
-                "Got long mode PDP entry %#016x.\n", (uint64_t)pte);
-        nextRead = ((uint64_t)pte & (mask(40) << 12)) + vaddr.longl2 * dataSize;
+        DPRINTF(PageTableWalker, "PC %#x %#x vaddr %#x "
+            "Got long mode PDP entry %#016x.\n",
+            tc->pcState().pc(), tc->instAddr(), vaddr, (uint64_t)pte);
+        nextRead = (uint64_t)pte & (mask(40) << 12);
+        nextRead += vaddr.longl2 * dataSize;
         doWrite = !pte.a;
         pte.a = 1;
         entry.writable = entry.writable && pte.w;
@@ -321,8 +353,9 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
         nextState = LongPD;
         break;
       case LongPD:
-        DPRINTF(PageTableWalker,
-                "Got long mode PD entry %#016x.\n", (uint64_t)pte);
+        DPRINTF(PageTableWalker, "PC %#x %#x vaddr %#x "
+            "Got long mode PD entry %#016x.\n",
+            tc->pcState().pc(), tc->instAddr(), vaddr, (uint64_t)pte);
         doWrite = !pte.a;
         pte.a = 1;
         entry.writable = entry.writable && pte.w;
@@ -338,6 +371,7 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
             nextRead =
                 ((uint64_t)pte & (mask(40) << 12)) + vaddr.longl1 * dataSize;
             nextState = LongPTE;
+            DPRINTF(PageTableWalkerVerbose, "LongPD: 4K vaddr=%#x\n", vaddr);
             break;
         } else {
             // 2 MB page
@@ -349,11 +383,15 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
             entry.vaddr = entry.vaddr & ~((2 * (1 << 20)) - 1);
             doTLBInsert = true;
             doEndWalk = true;
+            DPRINTF(PageTableWalkerVerbose, "LongPD: 2M TLBInsert,EndWalk "
+                "vaddr=%#x entry.vaddr %#x%s\n", vaddr, entry.vaddr,
+                (uncacheable) ? " uncacheable" : "");
             break;
         }
       case LongPTE:
-        DPRINTF(PageTableWalker,
-                "Got long mode PTE entry %#016x.\n", (uint64_t)pte);
+        DPRINTF(PageTableWalker, "PC %#x %#x vaddr %#x "
+            "Got long mode PTE entry %#016x.\n",
+            tc->pcState().pc(), tc->instAddr(), vaddr, (uint64_t)pte);
         doWrite = !pte.a;
         pte.a = 1;
         entry.writable = entry.writable && pte.w;
@@ -370,27 +408,36 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
         entry.vaddr = entry.vaddr & ~((4 * (1 << 10)) - 1);
         doTLBInsert = true;
         doEndWalk = true;
+        DPRINTF(PageTableWalkerVerbose, "LongPTE TLBInsert,EndWalk "
+            "vaddr=%#x entry.vaddr %#x%s\n", vaddr, entry.vaddr,
+            (uncacheable) ? " uncacheable" : "");
         break;
       case PAEPDP:
-        DPRINTF(PageTableWalker,
-                "Got legacy mode PAE PDP entry %#08x.\n", (uint32_t)pte);
+        DPRINTF(PageTableWalker, "PC %#x %#x vaddr %#x "
+            "Got legacy mode PAE PDP entry %#08x.\n",
+            tc->pcState().pc(), tc->instAddr(), vaddr, (uint32_t)pte);
         nextRead = ((uint64_t)pte & (mask(40) << 12)) + vaddr.pael2 * dataSize;
         if (!pte.p) {
             doEndWalk = true;
+            DPRINTF(PageTableWalkerVerbose, "PAEPDP: EndWalk "
+                "vaddr=%#x ", vaddr);
             fault = pageFault(pte.p);
             break;
         }
         nextState = PAEPD;
         break;
       case PAEPD:
-        DPRINTF(PageTableWalker,
-                "Got legacy mode PAE PD entry %#08x.\n", (uint32_t)pte);
+        DPRINTF(PageTableWalker, "PC %#x %#x vaddr %#x "
+            "Got legacy mode PAE PD entry %#08x.\n",
+            tc->pcState().pc(), tc->instAddr(), vaddr, (uint32_t)pte);
         doWrite = !pte.a;
         pte.a = 1;
         entry.writable = pte.w;
         entry.user = pte.u;
         if (badNX || !pte.p) {
             doEndWalk = true;
+            DPRINTF(PageTableWalkerVerbose, "PAEPD: EndWalk "
+                "vaddr=%#x ", vaddr);
             fault = pageFault(pte.p);
             break;
         }
@@ -399,6 +446,7 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
             entry.logBytes = 12;
             nextRead = ((uint64_t)pte & (mask(40) << 12)) + vaddr.pael1 * dataSize;
             nextState = PAEPTE;
+            DPRINTF(PageTableWalkerVerbose, "PAEPD: 4K vaddr=%#x\n", vaddr);
             break;
         } else {
             // 2 MB page
@@ -410,17 +458,23 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
             entry.vaddr = entry.vaddr & ~((2 * (1 << 20)) - 1);
             doTLBInsert = true;
             doEndWalk = true;
+            DPRINTF(PageTableWalkerVerbose, "PAEPD: 2M TLBInsert,EndWalk "
+                "vaddr=%#x entry.vaddr %#x%s\n", vaddr, entry.vaddr,
+                (uncacheable) ? " uncacheable" : "");
             break;
         }
       case PAEPTE:
-        DPRINTF(PageTableWalker,
-                "Got legacy mode PAE PTE entry %#08x.\n", (uint32_t)pte);
+        DPRINTF(PageTableWalker, "PC %#x %#x vaddr %#x "
+            "Got legacy mode PAE PTE entry %#08x.\n",
+            tc->pcState().pc(), tc->instAddr(), vaddr, (uint32_t)pte);
         doWrite = !pte.a;
         pte.a = 1;
         entry.writable = entry.writable && pte.w;
         entry.user = entry.user && pte.u;
         if (badNX || !pte.p) {
             doEndWalk = true;
+            DPRINTF(PageTableWalkerVerbose, "PAEPTE: EndWalk "
+                "vaddr=%#x ", vaddr);
             fault = pageFault(pte.p);
             break;
         }
@@ -431,16 +485,22 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
         entry.vaddr = entry.vaddr & ~((4 * (1 << 10)) - 1);
         doTLBInsert = true;
         doEndWalk = true;
+        DPRINTF(PageTableWalkerVerbose, "PAEPTE: TLBInsert,EndWalk "
+            "vaddr=%#x entry.vaddr %#x%s\n", vaddr, entry.vaddr,
+            (uncacheable) ? " uncacheable" : "");
         break;
       case PSEPD:
-        DPRINTF(PageTableWalker,
-                "Got legacy mode PSE PD entry %#08x.\n", (uint32_t)pte);
+        DPRINTF(PageTableWalker, "PC %#x %#x vaddr %#x "
+            "Got legacy mode PSE PD entry %#08x.\n",
+            tc->pcState().pc(), tc->instAddr(), vaddr, (uint32_t)pte);
         doWrite = !pte.a;
         pte.a = 1;
         entry.writable = pte.w;
         entry.user = pte.u;
         if (!pte.p) {
             doEndWalk = true;
+            DPRINTF(PageTableWalkerVerbose, "PSEPD: EndWalk "
+                "vaddr=%#x ", vaddr);
             fault = pageFault(pte.p);
             break;
         }
@@ -450,6 +510,7 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
             nextRead =
                 ((uint64_t)pte & (mask(20) << 12)) + vaddr.norml2 * dataSize;
             nextState = PTE;
+            DPRINTF(PageTableWalkerVerbose, "PSEPD: 4K vaddr=%#x\n", vaddr);
             break;
         } else {
             // 4 MB page
@@ -461,17 +522,23 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
             entry.vaddr = entry.vaddr & ~((4 * (1 << 20)) - 1);
             doTLBInsert = true;
             doEndWalk = true;
+            DPRINTF(PageTableWalkerVerbose, "PSEPD: 4M TLBInsert,EndWalk "
+                "vaddr=%#x entry.vaddr %#x%s\n", vaddr, entry.vaddr,
+                (uncacheable) ? " uncacheable" : "");
             break;
         }
       case PD:
-        DPRINTF(PageTableWalker,
-                "Got legacy mode PD entry %#08x.\n", (uint32_t)pte);
+        DPRINTF(PageTableWalker, "PC %#x %#x vaddr %#x "
+            "Got legacy mode PD entry %#08x.\n",
+            tc->pcState().pc(), tc->instAddr(), vaddr, (uint32_t)pte);
         doWrite = !pte.a;
         pte.a = 1;
         entry.writable = pte.w;
         entry.user = pte.u;
         if (!pte.p) {
             doEndWalk = true;
+            DPRINTF(PageTableWalkerVerbose, "PD: EndWalk "
+                "vaddr=%#x ", vaddr);
             fault = pageFault(pte.p);
             break;
         }
@@ -479,16 +546,20 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
         entry.logBytes = 12;
         nextRead = ((uint64_t)pte & (mask(20) << 12)) + vaddr.norml2 * dataSize;
         nextState = PTE;
+        DPRINTF(PageTableWalkerVerbose, "PD: 4K vaddr=%#x ", vaddr);
         break;
       case PTE:
-        DPRINTF(PageTableWalker,
-                "Got legacy mode PTE entry %#08x.\n", (uint32_t)pte);
+        DPRINTF(PageTableWalker, "PC %#x %#x vaddr %#x "
+            "Got legacy mode PTE entry %#08x.\n",
+            tc->pcState().pc(), tc->instAddr(), vaddr, (uint32_t)pte);
         doWrite = !pte.a;
         pte.a = 1;
         entry.writable = pte.w;
         entry.user = pte.u;
         if (!pte.p) {
             doEndWalk = true;
+            DPRINTF(PageTableWalkerVerbose, "PTE: EndWalk "
+                "vaddr=%#x ", vaddr);
             fault = pageFault(pte.p);
             break;
         }
@@ -499,14 +570,23 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
         entry.vaddr = entry.vaddr & ~((4 * (1 << 10)) - 1);
         doTLBInsert = true;
         doEndWalk = true;
+        DPRINTF(PageTableWalkerVerbose, "PTE: TLBInsert,EndWalk "
+            "vaddr=%#x entry.vaddr %#x%s\n", vaddr, entry.vaddr,
+            (uncacheable) ? " uncacheable" : "");
         break;
       default:
-        panic("Unknown page table walker state %d!\n");
+        panic("PC %#x %#x vaddr %#x Unknown page table walker state %#x!\n",
+            tc->pcState().pc(), tc->instAddr(), vaddr, state);
     }
     if (doEndWalk) {
-        if (doTLBInsert)
-            if (!functional)
+        if (doTLBInsert) {
+            if (!functional) {
+                DPRINTF(PageTableWalkerVerbose, "EndWalk,TLBInsert,"
+                    "!functional vaddr=%#x TLB->insert(entry.vaddr %#x, ..)\n",
+                    vaddr, entry.vaddr);
                 walker->tlb->insert(entry.vaddr, entry);
+            }
+        }
         endWalk();
     } else {
         PacketPtr oldRead = read;
@@ -517,6 +597,9 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
             new Request(nextRead, oldRead->getSize(), flags, walker->masterId);
         read = new Packet(request, MemCmd::ReadReq);
         read->allocate();
+        DPRINTF(PageTableWalkerVerbose, "!EndWalk oldRead %p oldRead->req %p "
+            "request %p read %p doWrite %d\n",
+            oldRead, oldRead->req, request, read, doWrite);
         // If we need to write, adjust the read packet to write the modified
         // value back to memory.
         if (doWrite) {
@@ -536,6 +619,8 @@ void
 Walker::WalkerState::endWalk()
 {
     nextState = Ready;
+    DPRINTF(PageTableWalkerVerbose, "%s: read %p req %p\n",
+        __func__, read, read->req);
     delete read->req;
     delete read;
     read = NULL;
@@ -550,6 +635,8 @@ Walker::WalkerState::setupWalk(Addr vaddr)
     Efer efer = tc->readMiscRegNoEffect(MISCREG_EFER);
     dataSize = 8;
     Addr topAddr;
+    DPRINTF(PageTableWalkerVerbose, "%s: cr3=%#x efer=%#x vaddr=%#x\n",
+        __func__, cr3, efer, vaddr);
     if (efer.lma) {
         // Do long mode.
         state = LongPML4;
@@ -587,6 +674,9 @@ Walker::WalkerState::setupWalk(Addr vaddr)
                                      walker->masterId);
     read = new Packet(request, MemCmd::ReadReq);
     read->allocate();
+    DPRINTF(PageTableWalkerVerbose, "%s vaddr=%#x topAddr=%#x dataSize=%d "
+        "masterId=%u read(pktPtr)=%#x\n",
+        __func__, entry.vaddr, topAddr, dataSize, walker->masterId, read);
 }
 
 bool
@@ -595,6 +685,8 @@ Walker::WalkerState::recvPacket(PacketPtr pkt)
     assert(pkt->isResponse());
     assert(inflight);
     assert(state == Waiting);
+    DPRINTF(PageTableWalkerVerbose, "%s inflight %d-- pkt %p isRead? %d\n",
+        __func__, inflight, pkt, pkt->isRead());
     inflight--;
     if (pkt->isRead()) {
         // should not have a pending read it we also had one outstanding
@@ -607,6 +699,8 @@ Walker::WalkerState::recvPacket(PacketPtr pkt)
         nextState = Ready;
         PacketPtr write = NULL;
         read = pkt;
+        DPRINTF(PageTableWalkerVerbose, "%s: write %#x %s\n",
+            __func__, write, write == NULL ? "N/A" : write->cmdString());
         timingFault = stepWalk(write);
         state = Waiting;
         assert(timingFault == NoFault || read == NULL);
@@ -631,10 +725,16 @@ Walker::WalkerState::recvPacket(PacketPtr pkt)
             bool delayedResponse;
             Fault fault = walker->tlb->translate(req, tc, NULL, mode,
                                                  delayedResponse, true);
+            // XXX-BZ if we hit this comment it out again:
             assert(!delayedResponse);
+            DPRINTF(PageTableWalkerVerbose, "%s: mode %#x dr=%s fault=%s\n",
+                __func__, mode, delayedResponse ? "yes" : "no",
+                (fault == NoFault) ? "NoFault" : "??Fault");
             // Let the CPU continue.
             translation->finish(fault, req, tc, mode);
         } else {
+            DPRINTF(PageTableWalkerVerbose, "%s: timingFault req %p tc %p "
+                "mode %#x\n", __func__, req, tc, mode);
             // There was a fault during the walk. Let the CPU know.
             translation->finish(timingFault, req, tc, mode);
         }
@@ -647,6 +747,8 @@ Walker::WalkerState::recvPacket(PacketPtr pkt)
 void
 Walker::WalkerState::sendPackets()
 {
+    DPRINTF(PageTableWalkerVerbose, "%s: retrying %d read %p "
+        "writes.size() %d\n", __func__, retrying, read, writes.size());
     //If we're already waiting for the port to become available, just return.
     if (retrying)
         return;
@@ -656,10 +758,14 @@ Walker::WalkerState::sendPackets()
         PacketPtr pkt = read;
         read = NULL;
         inflight++;
+        DPRINTF(PageTableWalkerVerbose, "%s: read ++inflight %d\n",
+            __func__, inflight);
         if (!walker->sendTiming(this, pkt)) {
             retrying = true;
             read = pkt;
             inflight--;
+            DPRINTF(PageTableWalkerVerbose, "%s: read --inflight %d\n",
+                __func__, inflight);
             return;
         }
     }
@@ -668,10 +774,14 @@ Walker::WalkerState::sendPackets()
         PacketPtr write = writes.back();
         writes.pop_back();
         inflight++;
+        DPRINTF(PageTableWalkerVerbose, "%s: writes ++inflight %d\n",
+            __func__, inflight);
         if (!walker->sendTiming(this, write)) {
             retrying = true;
             writes.push_back(write);
             inflight--;
+            DPRINTF(PageTableWalkerVerbose, "%s: writes --inflight %d\n",
+                __func__, inflight);
             return;
         }
     }
@@ -680,18 +790,21 @@ Walker::WalkerState::sendPackets()
 bool
 Walker::WalkerState::isRetrying()
 {
+    DPRINTF(PageTableWalkerVerbose, "%s: retrying %d\n", __func__, retrying);
     return retrying;
 }
 
 bool
 Walker::WalkerState::isTiming()
 {
+    DPRINTF(PageTableWalkerVerbose, "%s: timing %d\n", __func__, timing);
     return timing;
 }
 
 bool
 Walker::WalkerState::wasStarted()
 {
+    DPRINTF(PageTableWalkerVerbose, "%s: started %d\n", __func__, started);
     return started;
 }
 
@@ -699,6 +812,7 @@ void
 Walker::WalkerState::retry()
 {
     retrying = false;
+    DPRINTF(PageTableWalkerVerbose, "%s: retry = false\n", __func__);
     sendPackets();
 }
 

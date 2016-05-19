@@ -293,6 +293,19 @@ def addFSOptions(parser):
         parser.add_option("--enable-context-switch-stats-dump", \
                 action="store_true", help="Enable stats dump at context "\
                 "switches and dump tasks file (required for Streamline)")
+        parser.add_option("--pmu", action="store_true",
+                help="Enable PMU instruction support")
+        # Boot laoder options file
+        parser.add_option("--loader-config-file", action="store",
+                default=None, type="string", help="File boot loader specific "\
+                "options to be passed to the kernel")
+
+    if buildEnv['TARGET_ISA'] == "x86":
+        # Boot laoder options file
+        parser.add_option("--loader-config-file", action="store",
+                default=None, type="string",
+                help="File boot loader specific options to be passed to "\
+                "the kernel")
 
     # Benchmark options
     parser.add_option("--dual", action="store_true",
@@ -343,6 +356,8 @@ def addFSOptions(parser):
                       help="Path to the disk image to use.")
     parser.add_option("--root-device", action="store", type="string", default=None,
                       help="OS device name for root partition")
+    parser.add_option("--virtblk", action="store_true",
+                      help="Try to use a VirtIO Block for the disk-image")
 
     # Command line options
     parser.add_option("--command-line", action="store", type="string",

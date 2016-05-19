@@ -242,7 +242,8 @@ ElfObject::tryFile(const std::string &fname, size_t len, uint8_t *data,
             char *interp_path = (char*)data + phdr.p_offset;
             int fd = open(interp_path, O_RDONLY);
             if (fd == -1)
-                fatal("Unable to open dynamic executable's interpreter.\n");
+                fatal("Unable to open dynamic executable's interpreter: %s.\n",
+                    interp_path);
 
             struct stat sb;
             M5_VAR_USED int check_i = fstat(fd, &sb);
@@ -347,8 +348,8 @@ ElfObject::ElfObject(const std::string &_filename, size_t _len,
         ldMax = std::max(ldMax, phdr.p_vaddr + phdr.p_memsz);
 
         // Check to see if this segment contains the bss section.
-        if (phdr.p_paddr <= bss_sec_start &&
-            phdr.p_paddr + phdr.p_memsz > bss_sec_start &&
+        if (phdr.p_vaddr <= bss_sec_start &&
+            phdr.p_vaddr + phdr.p_memsz > bss_sec_start &&
             phdr.p_memsz - phdr.p_filesz > 0) {
             bss.baseAddr = phdr.p_paddr + phdr.p_filesz;
             bss.size = phdr.p_memsz - phdr.p_filesz;

@@ -56,6 +56,8 @@ const uint8_t UART_IER_RDI  = 0x01;
 const uint8_t UART_IER_THRI = 0x02;
 const uint8_t UART_IER_RLSI = 0x04;
 
+const uint8_t UART_DLL_INIT = 0x01;
+const uint8_t UART_DLH_INIT = 0x00;
 
 const uint8_t UART_LSR_TEMT = 0x40;
 const uint8_t UART_LSR_THRE = 0x20;
@@ -70,7 +72,7 @@ class Platform;
 class Uart8250 : public Uart
 {
   protected:
-    uint8_t IER, DLAB, LCR, MCR;
+    uint8_t IER, DLAB, DLL, DLH, LCR, MCR;
     Tick lastTxInt;
 
     class IntrEvent : public Event

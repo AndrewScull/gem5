@@ -48,7 +48,7 @@ class X86IntelMPFloatingPointer(SimObject):
     spec_rev = Param.UInt8(4, 'minor revision of the MP spec supported')
     # If no default configuration is used, set this to 0.
     default_config = Param.UInt8(0, 'which default configuration to use')
-    imcr_present = Param.Bool(True,
+    imcr_present = Param.Bool(False,
             'whether the IMCR register is present in the APIC')
 
 class X86IntelMPConfigTable(SimObject):
@@ -57,7 +57,7 @@ class X86IntelMPConfigTable(SimObject):
     cxx_header = 'arch/x86/bios/intelmp.hh'
 
     spec_rev = Param.UInt8(4, 'minor revision of the MP spec supported')
-    oem_id = Param.String("", 'system manufacturer')
+    oem_id = Param.String("gem5", 'system manufacturer')
     product_id = Param.String("", 'product family')
     oem_table_addr = Param.UInt32(0,
             'pointer to the optional oem configuration table')
@@ -115,7 +115,7 @@ class X86IntelMPBus(X86IntelMPBaseConfigEntry):
 
     bus_id = Param.UInt8(0, 'bus id assigned by the bios')
     bus_type = Param.String("", 'string that identify the bus type')
-    # Legal values for bus_type are:
+    # Legal values for bus_type are [space padded to 6 bytes]:
     #
     # "CBUS", "CBUSII", "EISA", "FUTURE", "INTERN", "ISA", "MBI", "MBII",
     # "MCA", "MPI", "MPSA", "NUBUS", "PCI", "PCMCIA", "TC", "VL", "VME",

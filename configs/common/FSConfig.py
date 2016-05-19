@@ -48,12 +48,14 @@ import PlatformConfig
 os_types = { 'alpha' : [ 'linux' ],
              'mips'  : [ 'linux' ],
              'sparc' : [ 'linux' ],
-             'x86'   : [ 'linux' ],
+             'x86'   : [ 'linux',
+                         'FreeBSD' ],
              'arm'   : [ 'linux',
                          'android-gingerbread',
                          'android-ics',
                          'android-jellybean',
-                         'android-kitkat' ],
+                         'android-kitkat',
+                         'FreeBSD' ],
            }
 
 class CowIdeDisk(IdeDisk):
@@ -73,6 +75,16 @@ def fillInCmdline(mdesc, template, **kwargs):
     kwargs.setdefault('mem', mdesc.mem())
     kwargs.setdefault('script', mdesc.script())
     return template % kwargs
+
+def parseLoaderConfigFile(self, loader_config_file):
+    lcf = binary(loader_config_file);
+    out=bytearray()
+    with open(lcf, 'r') as infile:
+       data = infile.read()
+       out = data.splitlines()
+       for l in out:
+           l.strip()
+       self.loader_config = out
 
 def makeLinuxAlphaSystem(mem_mode, mdesc=None, ruby=False, cmdline=None):
 
@@ -203,7 +215,7 @@ def makeSparcSystem(mem_mode, mdesc=None, cmdline=None):
 
 def makeArmSystem(mem_mode, machine_type, num_cpus=1, mdesc=None,
                   dtb_filename=None, bare_metal=False, cmdline=None,
-                  external_memory=""):
+                  external_memory="", loader_config_file=None, virtblk=None):
     assert machine_type
 
     default_dtbs = {
@@ -222,14 +234,16 @@ def makeArmSystem(mem_mode, machine_type, num_cpus=1, mdesc=None,
 
     pci_devices = []
 
-    if bare_metal:
-        self = ArmSystem()
-    else:
-        self = LinuxArmSystem()
-
     if not mdesc:
         # generic system
         mdesc = SysConfig()
+
+    if bare_metal:
+        self = ArmSystem()
+    elif 'FreeBSD' in mdesc.os_type():
+        self = FreebsdArmSystem()
+    else:
+        self = LinuxArmSystem()
 
     self.readfile = mdesc.script()
     self.iobus = IOXBar()
@@ -276,6 +290,15 @@ def makeArmSystem(mem_mode, machine_type, num_cpus=1, mdesc=None,
         self.pci_ide = IdeController(disks=[self.cf0])
         pci_devices.append(self.pci_ide)
 
+    # XXX-BZ how do we add more than 1 blk device?
+    if virtblk is not None:
+        blk = VirtIOBlock()
+        child = RawDiskImage(read_only=True)
+        child.image_file=mdesc.disk()
+        img = CowDiskImage(child=child, read_only=False)
+        blk.image = img
+        self.realview.virtio.vio = blk
+
     self.mem_ranges = []
     size_remain = long(Addr(mdesc.mem()))
     for region in self.realview._mem_regions:
@@ -298,7 +321,11 @@ def makeArmSystem(mem_mode, machine_type, num_cpus=1, mdesc=None,
         # EOT character on UART will end the simulation
         self.realview.uart.end_on_eot = True
     else:
-        if machine_type in default_kernels:
+        # Allow command line to override the default kernels.
+        # It is redundant but fs.py does it too late.
+        if mdesc.kernel is not None:
+            self.kernel = binary(mdesc.kernel)
+        elif machine_type in default_kernels:
             self.kernel = binary(default_kernels[machine_type])
 
         if dtb_filename:
@@ -309,9 +336,16 @@ def makeArmSystem(mem_mode, machine_type, num_cpus=1, mdesc=None,
 
         # Ensure that writes to the UART actually go out early in the boot
         if not cmdline:
-            cmdline = 'earlyprintk=pl011,0x1c090000 console=ttyAMA0 ' + \
-                      'lpj=19988480 norandmaps rw loglevel=8 ' + \
-                      'mem=%(mem)s root=%(rootdev)s'
+            if 'FreeBSD' in mdesc.os_type():
+                cmdline = '-hv';
+            else:
+                cmdline = 'earlyprintk=pl011,0x1c090000 console=ttyAMA0 ' + \
+                          'lpj=19988480 norandmaps rw loglevel=8 ' + \
+                          'mem=%(mem)s root=%(rootdev)s'
+
+        # Loader tunables file?
+        if loader_config_file is not None:
+            parseLoaderConfigFile(self, loader_config_file)
 
         # When using external memory, gem5 writes the boot loader to nvmem
         # and then SST will read from it, but SST can only get to nvmem from
@@ -484,13 +518,11 @@ def connectX86RubySystem(x86_sys):
     x86_sys.pc.attachIO(x86_sys.iobus, x86_sys._dma_ports)
 
 
-def makeX86System(mem_mode, numCPUs=1, mdesc=None, self=None, Ruby=False):
+def makeCommonX86System(mem_mode, numCPUs=1, mdesc=None, self=None,
+                        Ruby=False):
     if self == None:
         self = X86System()
 
-    if not mdesc:
-        # generic system
-        mdesc = SysConfig()
     self.readfile = mdesc.script()
 
     self.mem_mode = mem_mode
@@ -522,13 +554,6 @@ def makeX86System(mem_mode, numCPUs=1, mdesc=None, self=None, Ruby=False):
 
     self.intrctrl = IntrControl()
 
-    # Disks
-    disk0 = CowIdeDisk(driveID='master')
-    disk2 = CowIdeDisk(driveID='master')
-    disk0.childImage(mdesc.disk())
-    disk2.childImage(disk('linux-bigswap2.img'))
-    self.pc.south_bridge.ide.disks = [disk0, disk2]
-
     # Add in a Bios information structure.
     structures = [X86SMBiosBiosInformation()]
     self.smbios_table.structures = structures
@@ -553,9 +578,9 @@ def makeX86System(mem_mode, numCPUs=1, mdesc=None, self=None, Ruby=False):
     # In gem5 Pc::calcPciConfigAddr(), it required "assert(bus==0)",
     # but linux kernel cannot config PCI device if it was not connected to PCI bus,
     # so we fix PCI bus id to 0, and ISA bus id to 1.
-    pci_bus = X86IntelMPBus(bus_id = 0, bus_type='PCI')
+    pci_bus = X86IntelMPBus(bus_id = 0, bus_type='PCI   ')
     base_entries.append(pci_bus)
-    isa_bus = X86IntelMPBus(bus_id = 1, bus_type='ISA')
+    isa_bus = X86IntelMPBus(bus_id = 1, bus_type='ISA   ')
     base_entries.append(isa_bus)
     connect_busses = X86IntelMPBusHierarchy(bus_id=1,
             subtractive_decode=True, parent_bus=0)
@@ -569,6 +594,15 @@ def makeX86System(mem_mode, numCPUs=1, mdesc=None, self=None, Ruby=False):
             dest_io_apic_id = io_apic.id,
             dest_io_apic_intin = 16)
     base_entries.append(pci_dev4_inta)
+    pci_dev5_inta = X86IntelMPIOIntAssignment(
+            interrupt_type = 'INT',
+            polarity = 'ConformPolarity',
+            trigger = 'ConformTrigger',
+            source_bus_id = 0,
+            source_bus_irq = 0 + (5 << 2),
+            dest_io_apic_id = io_apic.id,
+            dest_io_apic_intin = 17)
+    base_entries.append(pci_dev5_inta)
     def assignISAInt(irq, apicPin):
         assign_8259_to_apic = X86IntelMPIOIntAssignment(
                 interrupt_type = 'ExtInt',
@@ -600,7 +634,14 @@ def makeLinuxX86System(mem_mode, numCPUs=1, mdesc=None, Ruby=False,
     self = LinuxX86System()
 
     # Build up the x86 system and then specialize it for Linux
-    makeX86System(mem_mode, numCPUs, mdesc, self, Ruby)
+    makeCommonX86System(mem_mode, numCPUs, mdesc, self, Ruby)
+
+    # Disks
+    disk0 = CowIdeDisk(driveID='master')
+    disk2 = CowIdeDisk(driveID='master')
+    disk0.childImage(mdesc.disk())
+    disk2.childImage(disk('linux-bigswap2.img'))
+    self.pc.south_bridge.ide.disks = [disk0, disk2]
 
     # We assume below that there's at least 1MB of memory. We'll require 2
     # just to avoid corner cases.
@@ -647,6 +688,86 @@ def makeLinuxX86System(mem_mode, numCPUs=1, mdesc=None, Ruby=False,
     self.kernel = binary('x86_64-vmlinux-2.6.22.9')
     return self
 
+def makeFreeBSDX86System(mem_mode, numCPUs=1, mdesc=None, Ruby=False,
+                       cmdline=None, loader_config_file=None, virtblk=None):
+    self = FreeBSDX86System();
+
+    # Build up the generic x86 system.
+    makeCommonX86System(mem_mode, numCPUs, mdesc, self, Ruby)
+
+    # We don't even bother with the IDE disks;  implementation too broken.
+    # XXX-BZ how do we add more than 1 blk device?
+    if virtblk is not None:
+        blk = VirtIOBlock()
+        child = RawDiskImage(read_only=True)
+        child.image_file=mdesc.disk()
+        img = CowDiskImage(child=child, read_only=False)
+        blk.image = img
+        self.pc.south_bridge.virtio.vio = blk
+
+    # We assume below that there's at least 1MB of memory. We'll require 2
+    # just to avoid corner cases.
+    phys_mem_size = sum(map(lambda r: r.size(), self.mem_ranges))
+    assert(phys_mem_size >= 0x200000)
+    assert(len(self.mem_ranges) <= 2)
+
+    entries = \
+       [
+        # Mark the first megabyte of memory as reserved
+        X86E820Entry(addr = 0, size = '639kB', range_type = 1),
+        X86E820Entry(addr = 0x9fc00, size = '385kB', range_type = 2),
+        # Mark the rest of physical memory as available
+        X86E820Entry(addr = 0x100000,
+                size = '%dB' % (self.mem_ranges[0].size() - 0x100000),
+                range_type = 1),
+        ]
+
+    # Mark [mem_size, 3GB) as reserved if memory less than 3GB, which force
+    # IO devices to be mapped to [0xC0000000, 0xFFFF0000). Requests to this
+    # specific range can pass though bridge to iobus.
+    if len(self.mem_ranges) == 1:
+        entries.append(X86E820Entry(addr = self.mem_ranges[0].size(),
+            size='%dB' % (0xC0000000 - self.mem_ranges[0].size()),
+            range_type=2))
+
+    # Reserve the last 16kB of the 32-bit address space for the m5op interface
+    entries.append(X86E820Entry(addr=0xFFFF0000, size='64kB', range_type=2))
+
+    # In case the physical memory is greater than 3GB, we split it into two
+    # parts and add a separate e820 entry for the second part.  This entry
+    # starts at 0x100000000,  which is the first address after the space
+    # reserved for devices.
+    if len(self.mem_ranges) == 2:
+        entries.append(X86E820Entry(addr = 0x100000000,
+            size = '%dB' % (self.mem_ranges[1].size()), range_type = 1))
+
+    self.e820_table.entries = entries
+
+    # Command line:
+    if not cmdline:
+        cmdline = '-hv';
+    self.boot_osflags = fillInCmdline(mdesc, cmdline)
+    if mdesc.kernel is None:
+        self.kernel = binary('kernel')
+
+    # Loader tunables file?
+    if loader_config_file is not None:
+        parseLoaderConfigFile(self, loader_config_file)
+
+    return self
+
+def makeX86System(mem_mode, numCPUs=1, mdesc=None, Ruby=False,
+                       cmdline=None, loader_config_file=None, virtblk=None):
+    if not mdesc:
+        # generic system
+        mdesc = SysConfig()
+
+    if 'FreeBSD' in mdesc.os_type():
+        self = makeFreeBSDX86System(mem_mode, numCPUs, mdesc, Ruby, cmdline,
+                                    loader_config_file, virtblk)
+    else:
+        self = makeLinuxX86System(mem_mode, numCPUs, mdesc, Ruby, cmdline)
+    return self
 
 def makeDualRoot(full_system, testSystem, driveSystem, dumpfile):
     self = Root(full_system = full_system)

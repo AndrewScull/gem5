@@ -63,3 +63,13 @@ class LinuxX86System(X86System):
 
     e820_table = Param.X86E820Table(
             X86E820Table(), 'E820 map of physical memory')
+
+class FreeBSDX86System(X86System):
+    type = 'FreeBSDX86System'
+    cxx_header = 'arch/x86/freebsd/system.hh'
+
+    e820_table = Param.X86E820Table(
+            X86E820Table(), 'E820 map of physical memory')
+
+    loader_config = VectorParam.String([], "Tunable strings");
+

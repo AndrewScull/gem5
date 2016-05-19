@@ -38,6 +38,7 @@
 # Authors: Andreas Sandberg
 
 from m5.SimObject import SimObject
+from m5.defines import buildEnv
 from m5.params import *
 from m5.proxy import *
 from Device import PioDevice
@@ -65,7 +66,11 @@ class PciVirtIO(PciDevice):
 
     ClassCode = 0xff # Misc device
 
-    BAR0 = 0x00000000 # Anywhere in 32-bit space
+    if buildEnv['TARGET_ISA'] == 'x86':
+        BAR0 = 0x00000001 # Anywhere in 32-bit space; IOREG
+    else:
+        # At least for 'arm':
+        BAR0 = 0x00000000 # Anywhere in 32-bit space; MMIO
     BAR0Size = '0B' # Overridden by the device model
 
     InterruptPin = 0x01 # Use #INTA

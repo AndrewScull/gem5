@@ -47,6 +47,15 @@
 #include "arch/x86/system.hh"
 #include "params/LinuxX86System.hh"
 
+class LinuxX86SystemHelper : public X86SystemHelper
+{
+
+  public:
+    virtual void setupPMAP(ThreadContext *);
+    virtual void transitionToLongMode(ThreadContext *);
+};
+
+
 class LinuxX86System : public X86System
 {
   protected:

@@ -66,8 +66,8 @@ Uart8250::IntrEvent::process()
 {
     if (intrBit & uart->IER) {
        DPRINTF(Uart, "UART InterEvent, interrupting\n");
-       uart->platform->postConsoleInt();
        uart->status |= intrBit;
+       uart->platform->postConsoleInt();
        uart->lastTxInt = curTick();
     }
     else
@@ -101,7 +101,8 @@ Uart8250::IntrEvent::scheduleIntr()
 
 
 Uart8250::Uart8250(const Params *p)
-    : Uart(p, 8), IER(0), DLAB(0), LCR(0), MCR(0), lastTxInt(0),
+    : Uart(p, 8), IER(0), DLAB(0), DLL(UART_DLL_INIT), DLH(UART_DLH_INIT),
+      LCR(0), MCR(0), lastTxInt(0),
       txIntrEvent(this, TX_INT), rxIntrEvent(this, RX_INT)
 {
 }
@@ -132,14 +133,14 @@ Uart8250::read(PacketPtr pkt)
                 if (term->dataAvailable() && (IER & UART_IER_RDI))
                     rxIntrEvent.scheduleIntr();
             } else { // dll divisor latch
-               ;
+                pkt->set(DLL);
             }
             break;
         case 0x1:
             if (!(LCR & 0x80)) { // Intr Enable Register(IER)
                 pkt->set(IER);
             } else { // DLM divisor latch MSB
-                ;
+                pkt->set(DLH);
             }
             break;
         case 0x2: // Intr Identification Register (IIR)
@@ -207,7 +208,7 @@ Uart8250::write(PacketPtr pkt)
                 if (UART_IER_THRI & IER)
                     txIntrEvent.scheduleIntr();
             } else { // dll divisor latch
-               ;
+                DLL = pkt->get<uint8_t>();
             }
             break;
         case 0x1:
@@ -248,7 +249,7 @@ Uart8250::write(PacketPtr pkt)
                     status &= ~RX_INT;
                 }
              } else { // DLM divisor latch MSB
-                ;
+                DLH = pkt->get<uint8_t>();
             }
             break;
         case 0x2: // FIFO Control Register (FCR)
@@ -297,6 +298,8 @@ Uart8250::serialize(CheckpointOut &cp) const
     SERIALIZE_SCALAR(status);
     SERIALIZE_SCALAR(IER);
     SERIALIZE_SCALAR(DLAB);
+    SERIALIZE_SCALAR(DLL);
+    SERIALIZE_SCALAR(DLH);
     SERIALIZE_SCALAR(LCR);
     SERIALIZE_SCALAR(MCR);
     Tick rxintrwhen;
@@ -319,6 +322,8 @@ Uart8250::unserialize(CheckpointIn &cp)
     UNSERIALIZE_SCALAR(status);
     UNSERIALIZE_SCALAR(IER);
     UNSERIALIZE_SCALAR(DLAB);
+    UNSERIALIZE_SCALAR(DLL);
+    UNSERIALIZE_SCALAR(DLH);
     UNSERIALIZE_SCALAR(LCR);
     UNSERIALIZE_SCALAR(MCR);
     Tick rxintrwhen;

@@ -85,6 +85,27 @@ namespace X86ISA
     const uint64_t pageTablePhysAddr = 0x70000;
 }
 
+class X86SystemHelper
+{
+
+  public:
+    inline X86SystemHelper() { }
+    inline ~X86SystemHelper() { }
+
+  public:
+    virtual void setupPMAP(ThreadContext *) = 0;
+    virtual void transitionToLongMode(ThreadContext *) = 0;
+
+  protected:
+    static const int NumPDTs = 4;
+
+    const Addr PageMapLevel4 = 0x70000;
+    const Addr PageDirPtrTable = 0x71000;
+    const Addr PageDirTable[NumPDTs] =
+        {0x72000, 0x73000, 0x74000, 0x75000};
+
+};
+
 class X86System : public System
 {
   public:
@@ -97,14 +118,15 @@ class X86System : public System
  */
   public:
 
+    void setHelper(X86SystemHelper *h) { _helper = h; }
     void initState();
 
   protected:
-
     X86ISA::SMBios::SMBiosTable * smbiosTable;
     X86ISA::IntelMP::FloatingPointer * mpFloatingPointer;
     X86ISA::IntelMP::ConfigTable * mpConfigTable;
     X86ISA::ACPI::RSDP * rsdp;
+    X86SystemHelper * _helper;
 
     void writeOutSMBiosTable(Addr header,
             Addr &headerSize, Addr &tableSize, Addr table = 0);
