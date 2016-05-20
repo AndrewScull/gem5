@@ -219,8 +219,8 @@
                     0x58: m5reserved4({{
                         warn("M5 reserved opcode 4 ignored.\n");
                     }}, IsNonSpeculative);
-                    0x59: m5reserved5({{
-                        warn("M5 reserved opcode 5 ignored.\n");
+                    0x59: setdebugflags({{
+                        PseudoInst::setdebugflags(xc->tcBase(), Rdi);
                     }}, IsNonSpeculative);
                     0x5a: m5_work_begin({{
                         PseudoInst::workbegin(xc->tcBase(), Rdi, Rsi);

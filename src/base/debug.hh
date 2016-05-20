@@ -131,6 +131,8 @@ extern Flag *const All;
 
 bool changeFlag(const char *s, bool value);
 
+void setDebugFlags(const char *s);
+
 } // namespace Debug
 
 void setDebugFlag(const char *string);

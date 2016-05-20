@@ -186,6 +186,10 @@ pseudoInst(ThreadContext *tc, uint8_t func, uint8_t subfunc)
       case 0x54: // panic_func
         panic("M5 panic instruction called at %s\n", tc->pcState());
 
+      case 0x59: // setdebugflags
+        setdebugflags(tc, args[0]);
+        break;
+
       case 0x5a: // work_begin_func
         workbegin(tc, args[0], args[1]);
         break;
@@ -198,7 +202,6 @@ pseudoInst(ThreadContext *tc, uint8_t func, uint8_t subfunc)
       case 0x56: // reserved2_func
       case 0x57: // reserved3_func
       case 0x58: // reserved4_func
-      case 0x59: // reserved5_func
         warn("Unimplemented m5 op (0x%x)\n", func);
         break;
 
@@ -643,6 +646,17 @@ switchcpu(ThreadContext *tc)
 {
     DPRINTF(PseudoInst, "PseudoInst::switchcpu()\n");
     exitSimLoop("switchcpu");
+}
+
+void
+setdebugflags(ThreadContext *tc, Addr addr)
+{
+    DPRINTF(PseudoInst, "PseudoInst::setdebugflags(0x%x)\n", addr);
+
+    // copy out debug flags string
+    char flags[256];
+    CopyStringOut(tc, flags, addr, 256);
+    Debug::setDebugFlags(flags);
 }
 
 //

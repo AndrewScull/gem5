@@ -171,6 +171,30 @@ changeFlag(const char *s, bool value)
     return true;
 }
 
+void
+setDebugFlags(const char *s)
+{
+  All->disable();
+
+  std::string flags(s);
+  flags += ',';
+  string::iterator front = flags.end();
+  for (auto i = flags.begin(); i != flags.end(); ++i) {
+      if (front == flags.end()) {
+          front = i;
+          continue;
+      }
+
+      if (i == flags.end() || *i == ',') {
+          bool on = *front != '-';
+          if (!on)
+              ++front;
+          changeFlag(string(front, i).c_str(), on);
+          front = flags.end();
+      }
+  }
+}
+
 } // namespace Debug
 
 // add a set of functions that can easily be invoked from gdb
