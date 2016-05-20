@@ -246,6 +246,14 @@ do_checkpoint(int argc, char *argv[])
     m5_checkpoint(ints[0], ints[1]);
 }
 
+void do_set_debug_flags(int argc, char *argv[])
+{
+  if (argc != 1)
+    usage();
+
+  m5_set_debug_flags(argv[0]);
+}
+
 void
 do_load_symbol(int argc, char *argv[])
 {
@@ -326,6 +334,7 @@ struct MainFunc mainfuncs[] = {
     { "writefile",      do_write_file,       "<filename>" },
     { "execfile",       do_exec_file,        "" },
     { "checkpoint",     do_checkpoint,       "[delay [period]]" },
+    { "setdebugflags",  do_set_debug_flags,  "" },
     { "loadsymbol",     do_load_symbol,      "<address> <symbol>" },
     { "initparam",      do_initparam,        "[key] // key must be shorter than 16 chars" },
     { "sw99param",      do_sw99param,        "" },

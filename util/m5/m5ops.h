@@ -120,6 +120,7 @@
     M5OP(m5_switchcpu, switchcpu_func, 0);              \
     M5OP(m5_addsymbol, addsymbol_func, 0);              \
     M5OP(m5_panic, panic_func, 0);                      \
+    M5OP(m5_set_debug_flags, setdebugflags_func, 0);   \
     M5OP(m5_work_begin, work_begin_func, 0);            \
     M5OP(m5_work_end, work_end_func, 0);
 
