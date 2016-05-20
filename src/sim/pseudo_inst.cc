@@ -169,7 +169,7 @@ pseudoInst(ThreadContext *tc, uint8_t func, uint8_t subfunc)
         return writefile(tc, args[0], args[1], args[2], args[3]);
 
       case 0x50: // readfile_func
-        return readfile(tc, args[0], args[1], args[2]);
+        return readfile(tc, args[0], args[1], args[2], args[3]);
 
       case 0x51: // debugbreak_func
         debugbreak(tc);
@@ -548,7 +548,8 @@ m5checkpoint(ThreadContext *tc, Tick delay, Tick period)
 }
 
 uint64_t
-readfile(ThreadContext *tc, Addr vaddr, uint64_t len, uint64_t offset)
+readfile(ThreadContext *tc, Addr vaddr, uint64_t len, uint64_t offset,
+            Addr filename_addr)
 {
     DPRINTF(PseudoInst, "PseudoInst::readfile(0x%x, 0x%x, 0x%x)\n",
             vaddr, len, offset);
@@ -557,7 +558,17 @@ readfile(ThreadContext *tc, Addr vaddr, uint64_t len, uint64_t offset)
         return 0;
     }
 
-    const string &file = tc->getSystemPtr()->params()->readfile;
+    string file;
+    if (filename_addr == 0) {
+        // get the file name from the params if a NULL pointer is provided
+        file = tc->getSystemPtr()->params()->readfile;
+    } else {
+        // copy out source file name
+        char fn[100];
+        CopyStringOut(tc, fn, filename_addr, 100);
+        file = std::string(fn);
+    }
+
     if (file.empty()) {
         return ULL(0);
     }

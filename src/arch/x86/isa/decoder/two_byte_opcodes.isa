@@ -192,7 +192,7 @@
                     }}, IsNonSpeculative);
                     0x50: m5readfile({{
                         Rax = PseudoInst::readfile(
-                            xc->tcBase(), Rdi, Rsi, Rdx);
+                            xc->tcBase(), Rdi, Rsi, Rdx, Rcx);
                     }}, IsNonSpeculative);
                     0x51: m5debugbreak({{
                         PseudoInst::debugbreak(xc->tcBase());

@@ -105,7 +105,7 @@ parse_str_args_to_regs(int argc, char *argv[], uint64_t regs[], int len)
 }
 
 int
-read_file(int dest_fid)
+read_file(int dest_fid, const char* filename)
 {
     char buf[256*1024];
     int offset = 0;
@@ -116,7 +116,7 @@ read_file(int dest_fid)
     // Linux does demand paging.
     memset(buf, 0, sizeof(buf));
 
-    while ((len = m5_readfile(buf, sizeof(buf), offset)) > 0) {
+    while ((len = m5_readfile(buf, sizeof(buf), offset, filename)) > 0) {
         write(dest_fid, buf, len);
         offset += len;
     }
@@ -200,10 +200,14 @@ do_dump_reset_stats(int argc, char *argv[])
 void
 do_read_file(int argc, char *argv[])
 {
-    if (argc > 0)
+    if (argc > 1)
         usage();
 
-    read_file(STDOUT_FILENO);
+    const char *filename = NULL;
+    if (argc == 1)
+      filename = argv[0];
+
+    read_file(STDOUT_FILENO, filename);
 }
 
 void
@@ -226,7 +230,7 @@ do_exec_file(int argc, char *argv[])
     const char *destname = "/tmp/execfile";
 
     int fid = open(destname, O_WRONLY, 0777);
-    int len = read_file(fid);
+    int len = read_file(fid, NULL);
     close(fid);
     if (len > 0) {
         execl(destname, "execfile", NULL);
@@ -318,7 +322,7 @@ struct MainFunc mainfuncs[] = {
     { "resetstats",     do_reset_stats,      "[delay [period]]" },
     { "dumpstats",      do_dump_stats,       "[delay [period]]" },
     { "dumpresetstats", do_dump_reset_stats, "[delay [period]]" },
-    { "readfile",       do_read_file,        "" },
+    { "readfile",       do_read_file,        "[filename]" },
     { "writefile",      do_write_file,       "<filename>" },
     { "execfile",       do_exec_file,        "" },
     { "checkpoint",     do_checkpoint,       "[delay [period]]" },
