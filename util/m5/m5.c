@@ -254,6 +254,14 @@ void do_set_debug_flags(int argc, char *argv[])
   m5_set_debug_flags(argv[0]);
 }
 
+void do_partition_trace(int argc, char *argv[])
+{
+  if (argc > 1)
+    usage();
+
+  m5_partition_trace(argc == 1 ? argv[0] : NULL);
+}
+
 void
 do_load_symbol(int argc, char *argv[])
 {
@@ -334,7 +342,8 @@ struct MainFunc mainfuncs[] = {
     { "writefile",      do_write_file,       "<filename>" },
     { "execfile",       do_exec_file,        "" },
     { "checkpoint",     do_checkpoint,       "[delay [period]]" },
-    { "setdebugflags",  do_set_debug_flags,  "" },
+    { "setdebugflags",  do_set_debug_flags,  "<flags>" },
+    { "partitiontrace", do_partition_trace,  "[name]" },
     { "loadsymbol",     do_load_symbol,      "<address> <symbol>" },
     { "initparam",      do_initparam,        "[key] // key must be shorter than 16 chars" },
     { "sw99param",      do_sw99param,        "" },

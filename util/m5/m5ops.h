@@ -69,8 +69,8 @@
 
 #define reserved2_func          0x56 // Reserved for user
 #define reserved3_func          0x57 // Reserved for user
-#define reserved4_func          0x58 // Reserved for user
 
+#define partitiontrace_func     0x58
 #define setdebugflags_func      0x59
 #define work_begin_func         0x5a
 #define work_end_func           0x5b
@@ -120,7 +120,8 @@
     M5OP(m5_switchcpu, switchcpu_func, 0);              \
     M5OP(m5_addsymbol, addsymbol_func, 0);              \
     M5OP(m5_panic, panic_func, 0);                      \
-    M5OP(m5_set_debug_flags, setdebugflags_func, 0);   \
+    M5OP(m5_partition_trace, partitiontrace_func, 0);   \
+    M5OP(m5_set_debug_flags, setdebugflags_func, 0);    \
     M5OP(m5_work_begin, work_begin_func, 0);            \
     M5OP(m5_work_end, work_end_func, 0);
 
