@@ -124,7 +124,7 @@ class FileLogger  : public Logger
     uint32_t partno;
 
   public:
-    FileLogger(const std::string &filename_) { openFile(filename_); }
+    FileLogger(const std::string &filename_) { openFile(filename_, "", 0); }
 
     void logMessage(Tick when, const std::string &name,
                     const std::string &message) override
@@ -135,7 +135,8 @@ class FileLogger  : public Logger
     std::ostream &getOstream() override { return stream->getOstream(); }
 
   protected:
-    void openFile(const std::string &filename_);
+    void openFile(const std::string &filename_,
+        const std::string &partname_, uint32_t partno_);
 };
 
 /** Get the current global debug logger.  This takes ownership of the given

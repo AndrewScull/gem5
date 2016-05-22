@@ -169,28 +169,31 @@ OstreamLogger::partition(const std::string &name)
 void
 FileLogger::partition(const std::string &name)
 {
-    if (name.empty()) {
-        ++partno;
-    } else {
-        partname = name;
-        partno = 0;
-    }
+    if (name.empty())
+        openFile(filename, partname, partno + 1);
+    else
+        openFile(filename, name, 0);
 
-    std::string file = filename + "." + partname;
-    if (partno)
-      file += "." + std::to_string(partno);
-
-    openFile(file);
 }
 
 void
-FileLogger::openFile(const std::string &filename_)
+FileLogger::openFile(const std::string &filename_,
+    const std::string &partname_, uint32_t partno_)
 {
     filename = filename_;
-    OutputStream *file_stream = simout.find(filename);
+    partname = partname_;
+    partno = partno_;
+
+    std::string file = filename;
+    if (!partname.empty())
+        file += "." + partname;
+    if (partno)
+        file += "." + std::to_string(partno);
+
+    OutputStream *file_stream = simout.find(file);
 
     if (!file_stream)
-        file_stream = simout.create(filename);
+        file_stream = simout.create(file);
 
     stream = new OstreamLogger(*file_stream->stream());
 }
