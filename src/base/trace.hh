@@ -83,6 +83,11 @@ class Logger
      *  way, or just set to one of std::cout, std::cerr */
     virtual std::ostream &getOstream() = 0;
 
+    /** Insert a parition into the log. It will be names by the
+     *  string passed in. An empty name will result in an
+     *  anonymous partition. */
+    virtual void partition(const std::string &name) = 0;
+
     /** Set objects to ignore */
     void setIgnore(ObjectMatch &ignore_) { ignore = ignore_; }
 
@@ -103,7 +108,34 @@ class OstreamLogger : public Logger
     void logMessage(Tick when, const std::string &name,
                     const std::string &message) override;
 
+    void partition(const std::string &name) override;
+
     std::ostream &getOstream() override { return stream; }
+};
+
+/** Logging wrapper for files:
+ *  <when>: <name>: <message-body> */
+class FileLogger  : public Logger
+{
+  protected:
+    OstreamLogger *stream;
+    std::string filename;
+    std::string partname;
+    uint32_t partno;
+
+  public:
+    FileLogger(const std::string &filename_) { openFile(filename_); }
+
+    void logMessage(Tick when, const std::string &name,
+                    const std::string &message) override
+    { stream->logMessage(when, name, message); }
+
+    void partition(const std::string &name) override;
+
+    std::ostream &getOstream() override { return stream->getOstream(); }
+
+  protected:
+    void openFile(const std::string &filename_);
 };
 
 /** Get the current global debug logger.  This takes ownership of the given

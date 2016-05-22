@@ -156,4 +156,43 @@ OstreamLogger::logMessage(Tick when, const std::string &name,
     stream.flush();
 }
 
+void
+OstreamLogger::partition(const std::string &name)
+{
+    stream << "---=== PARTITION ";
+    if (!name.empty())
+        stream << " (" <<  name << ") ";
+    stream << "===---\n";
+    stream.flush();
+}
+
+void
+FileLogger::partition(const std::string &name)
+{
+    if (name.empty()) {
+        ++partno;
+    } else {
+        partname = name;
+        partno = 0;
+    }
+
+    std::string file = filename + "." + partname;
+    if (partno)
+      file += "." + std::to_string(partno);
+
+    openFile(file);
+}
+
+void
+FileLogger::openFile(const std::string &filename_)
+{
+    filename = filename_;
+    OutputStream *file_stream = simout.find(filename);
+
+    if (!file_stream)
+        file_stream = simout.create(filename);
+
+    stream = new OstreamLogger(*file_stream->stream());
+}
+
 } // namespace Trace

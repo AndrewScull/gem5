@@ -216,8 +216,8 @@
                     0x57: m5reserved3({{
                         warn("M5 reserved opcode 3 ignored.\n");
                     }}, IsNonSpeculative);
-                    0x58: m5reserved4({{
-                        warn("M5 reserved opcode 4 ignored.\n");
+                    0x58: partitionTrace({{
+                        PseudoInst::partitionTrace(xc->tcBase(), Rdi);
                     }}, IsNonSpeculative);
                     0x59: setdebugflags({{
                         PseudoInst::setdebugflags(xc->tcBase(), Rdi);

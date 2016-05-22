@@ -186,6 +186,10 @@ pseudoInst(ThreadContext *tc, uint8_t func, uint8_t subfunc)
       case 0x54: // panic_func
         panic("M5 panic instruction called at %s\n", tc->pcState());
 
+      case 0x58: // partitionTrace
+        partitionTrace(tc, args[0]);
+        break;
+
       case 0x59: // setdebugflags
         setdebugflags(tc, args[0]);
         break;
@@ -201,7 +205,6 @@ pseudoInst(ThreadContext *tc, uint8_t func, uint8_t subfunc)
       case 0x55: // annotate_func
       case 0x56: // reserved2_func
       case 0x57: // reserved3_func
-      case 0x58: // reserved4_func
         warn("Unimplemented m5 op (0x%x)\n", func);
         break;
 
@@ -657,6 +660,21 @@ switchcpu(ThreadContext *tc)
 {
     DPRINTF(PseudoInst, "PseudoInst::switchcpu()\n");
     exitSimLoop("switchcpu");
+}
+
+void
+partitionTrace(ThreadContext *tc, Addr addr)
+{
+    DPRINTF(PseudoInst, "PseudoInst::partitionTrace(0x%x)\n", addr);
+
+    // copy out partition name if given
+    std::string name;
+    if (addr) {
+        char name_buf[100];
+        CopyStringOut(tc, name_buf, addr, 100);
+        name = std::string(name_buf);
+    }
+    Trace::getDebugLogger()->partition(name);
 }
 
 void

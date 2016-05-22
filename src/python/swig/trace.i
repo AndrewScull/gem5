@@ -33,17 +33,12 @@
 %{
 #include "base/trace.hh"
 #include "base/types.hh"
-#include "base/output.hh"
 
 inline void
 output(const char *filename)
 {
-    OutputStream *file_stream = simout.find(filename);
-
-    if (!file_stream)
-        file_stream = simout.create(filename);
-
-    Trace::setDebugLogger(new Trace::OstreamLogger(*file_stream->stream()));
+    // TODO(andrew): What if it is stdout?
+    Trace::setDebugLogger(new Trace::FileLogger(filename));
 }
 
 inline void
