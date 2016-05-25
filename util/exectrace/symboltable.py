@@ -8,6 +8,8 @@ class SymbolTable:
         import os
         if not addr in self.__syms:
             cmd = 'addr2line -fe ' + self.__path + ' ' + hex(addr-self.__base)
-            self.__syms[addr] = os.popen(cmd).read().split('\n')[0]
+            self.__syms[addr] = os.popen(cmd).read().split('\n')[:-1]
         return self.__syms[addr]
 
+    def base(self):
+        return self.__base

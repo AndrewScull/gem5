@@ -61,10 +61,10 @@ class Parser:
         offset = int(offset) if offset else None
         addr = int(addr, 16) if addr else None
         micro_op_num = int(micro_op_num) if micro_op_num else None
+        line = None
 
         if addr and symtab:
-            sym = symtab.getsym(addr)
-            self.__last_sym = sym
+            sym,line = symtab.getsym(addr)
 
         if micro_op_num == None:
             cpu = fields[1][:-1]
@@ -72,6 +72,7 @@ class Parser:
                     tick=int(fields[0]),
                     cpu=cpu,
                     symbol=sym,
+                    line=line,
                     offset=offset,
                     address=addr,
                     asm=fields[3].strip())

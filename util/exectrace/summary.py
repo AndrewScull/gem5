@@ -118,7 +118,7 @@ class Summary:
                     ret += '%.2f\t' % val
                 else:
                     ret += str(val) + '\t'
-            ret += sym + '\n'
+            ret += str(sym) + '\n'
         return ret
 
     def totals(self):

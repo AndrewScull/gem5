@@ -20,16 +20,31 @@ class TraceBuilder(Analysis):
     def results(self):
         return self.__instructions
 
+# Count the number of instructions per source code line
+class SourceLines(Analysis):
+    def __init__(self, fn=None):
+        self.__fn = fn
+        self.__lines = {}
+
+    def instruction(self, instr):
+        if self.__fn and not instr.symbol() == self.__fn:
+            return
+        line = self.__lines.setdefault(instr.source_line(), {})
+        addr = instr.address()
+        line[addr] = line.get(addr, 0) + 1
+
+    def results(self):
+        return self.__lines
+
 # Collect the instruction pointers used by each symbol
 class SymbolIps(Analysis):
     def __init__(self):
         self.__syms = {}
 
     def instruction(self, instr):
-        if instr.symbol():
-            ips = self.__syms.setdefault(instr.symbol(), {})
-            addr = instr.address()
-            ips[addr] = ips.get(addr, 0) + 1
+        ips = self.__syms.setdefault(instr.symbol(), {})
+        addr = instr.address()
+        ips[addr] = ips.get(addr, 0) + 1
 
     def results(self):
         return self.__syms

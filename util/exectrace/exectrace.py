@@ -20,15 +20,6 @@ class ExecTrace:
     def __iter__(self):
         return iter(self.__instructions)
 
-    # unique instruction pointers and count per symbol
-    def count_ips(self, fn):
-        ips = {}
-        for i in self.__instructions:
-            if i.symbol() == fn:
-                offset = i.address()
-                ips[offset] = ips.get(offset, 0) + 1
-        return ips
-
     def summary(self):
         # Pump the instruction through the analysers to generate the data
         # needed for the summary
@@ -43,16 +34,11 @@ class ExecTrace:
         return str(Summary(ip_analysis, addr_analysis))
 
     def gethotlines(self, fn, base=0xffffffff80a16000):
-        import os
-        ip_cnt = sorted_by_values(self.count_ips(fn), reverse=True)
-        ips = [a-base for a,b in ip_cnt]
-        cmd = 'addr2line -e /gem5/freebsd/inst/boot/kernel/dtrace.ko.symbols'
-        for i in ips:
-            cmd += ' ' + hex(i)
-        lines = {}
-        for line,(addr,nr) in zip(os.popen(cmd).read().split('\n'),ip_cnt):
-            (c,a) = lines.get(line, (0,[]))
-            lines[line] = (c+nr, a + [addr])
+        lines_analysis = analysis.SourceLines(fn)
+        for i in self:
+            lines_analysis.instruction(i)
+        lines = {line: (sum(addrs.itervalues()), addrs.keys())
+                for line,addrs in lines_analysis.results().iteritems()}
         for line,(nr,addr) in sorted_by_values(lines, reverse=True):
             print nr, line[line.rfind('/'):], '[', ' '.join(
                     '%02x' % (a-base) for a in sorted(addr)), ']'
@@ -68,6 +54,17 @@ def summarize(filename, symtab):
     p.load(filename, symtab)
     return str(Summary(ip_analysis, addr_analysis))
 
+def hotlines(filename, fn, symtab):
+    p = Parser()
+    lines_analysis = analysis.SourceLines(fn)
+    p.add_analysis(lines_analysis)
+    p.load(filename, symtab)
+    lines = {line: (sum(addrs.itervalues()), addrs.keys())
+            for line,addrs in lines_analysis.results().iteritems()}
+    for line,(nr,addr) in sorted_by_values(lines, reverse=True):
+        print nr, line[line.rfind('/'):], '[', ' '.join(
+                '%02x' % (a-symtab.base()) for a in sorted(addr)), ']'
+
 def sorted_by_values(obj, cmp=None, reverse=False):
     return sorted(obj.items(), cmp, lambda x: x[1], reverse)
 
@@ -79,6 +76,8 @@ def parse_args():
             help='Instruction trace log file to parse.')
     parser.add_argument('--summary', action='store_true',
             help='Print a summary of analysis')
+    parser.add_argument('--nosym', action='store_true',
+            help='Do not process symbols')
     parser.add_argument('--hotlines', type=str,
             help='Print hot line for a function')
     return parser.parse_args()
@@ -95,11 +94,13 @@ def main():
 
     syms = SymbolTable('/gem5/freebsd/inst/boot/kernel/dtrace.ko.symbols',
             0xffffffff80a16000)
+    if args.nosym:
+        syms = None
 
     if args.summary or not args.hotlines:
         print summarize(args.logfile, syms)
     if args.hotlines:
-        trace.gethotlines(args.hotlines)
+        hotlines(args.logfile, args.hotlines, syms)
 
 if __name__ == "__main__":
     main()

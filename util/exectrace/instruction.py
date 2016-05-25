@@ -1,8 +1,9 @@
 class Instruction:
-    def __init__(self, tick, cpu, symbol, offset, address, asm):
+    def __init__(self, tick, cpu, symbol, line, offset, address, asm):
         self.__tick = tick
         self.__cpu = cpu
         self.__symbol = symbol
+        self.__source_line = line
         self.__offset = offset
         self.__address = address
         self.__asm = asm
@@ -23,6 +24,8 @@ class Instruction:
         return self.__cpu
     def symbol(self):
         return self.__symbol
+    def source_line(self):
+        return self.__source_line
     def offset(self):
         return self.__offset
     def address(self):
