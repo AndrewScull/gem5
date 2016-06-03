@@ -131,4 +131,4 @@ class Summary:
         return self.__mem
 
     def addr(self):
-        return self._addr
+        return self.__addr

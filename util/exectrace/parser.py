@@ -64,7 +64,9 @@ class Parser:
         line = None
 
         if addr and symtab:
-            sym,line = symtab.getsym(addr)
+            symres = symtab.getsym(addr)
+            if symres:
+                sym,line = symres
 
         if micro_op_num == None:
             cpu = fields[1][:-1]

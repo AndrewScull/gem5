@@ -52,7 +52,7 @@ def summarize(filename, symtab):
     p.add_analysis(ip_analysis)
     p.add_analysis(addr_analysis)
     p.load(filename, symtab)
-    return str(Summary(ip_analysis, addr_analysis))
+    return Summary(ip_analysis, addr_analysis)
 
 def hotlines(filename, fn, symtab):
     p = Parser()
@@ -78,6 +78,8 @@ def parse_args():
             help='Print a summary of analysis')
     parser.add_argument('--nosym', action='store_true',
             help='Do not process symbols')
+    parser.add_argument('--jit', action='store_true',
+            help='Is it the jit version?')
     parser.add_argument('--hotlines', type=str,
             help='Print hot line for a function')
     return parser.parse_args()
@@ -92,13 +94,17 @@ def debug_load(log='/gem5/experiments/m5out/sim00001/debug.log'):
 def main():
     args = parse_args()
 
-    syms = SymbolTable('/gem5/freebsd/inst/boot/kernel/dtrace.ko.symbols',
-            0xffffffff80a16000)
-    if args.nosym:
-        syms = None
+    if args.jit:
+        symfile = '/gem5/experiments/exports/dtrace_jit.ko.symbols'
+        symbase = 0xffffffff80a16000
+    else:
+        symfile = '/gem5/freebsd/inst/boot/kernel/dtrace.ko.symbols'
+        symbase = 0xffffffff80a16000
+
+    syms = SymbolTable(symfile, symbase) if not args.nosym else None
 
     if args.summary or not args.hotlines:
-        print summarize(args.logfile, syms)
+        print str(summarize(args.logfile, syms))
     if args.hotlines:
         hotlines(args.logfile, args.hotlines, syms)
 
